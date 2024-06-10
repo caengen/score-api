@@ -95,7 +95,7 @@ async fn main(
     client: Database,
 ) -> shuttle_axum::ShuttleAxum {
     let client = Arc::new(client);
-    let conn = client.connect().unwrap();
+    // let conn = client.connect().unwrap();
 
     // conn.execute(
     //     "create table if not exists example_users ( uid text primary key, email text );",
