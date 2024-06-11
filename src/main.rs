@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use anyhow::format_err;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -9,6 +10,8 @@ use axum::{
 };
 use libsql::Database;
 use serde::{Deserialize, Serialize};
+use shuttle_runtime::SecretStore;
+use tracing::info;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct CompleteScore {
@@ -20,26 +23,45 @@ struct CompleteScore {
 async fn get_scores_handler(
     Path(scoreboard_id): Path<u32>,
     State(client): State<Arc<Database>>,
-) -> Json<Vec<CompleteScore>> {
+) -> Json<usize> {
+    info!("Establishing connection...");
     let conn = client.connect().unwrap();
-
-    let mut rows = conn
+    info!("Connected to database.");
+    info!("selecting rows for scoreboard_id {}", scoreboard_id);
+    // let mut rows = conn
+    //     .query(
+    //         "select signature_name, points, timestamp from score where scoreboard_id = ?0;",
+    //         libsql::params![scoreboard_id],
+    //     )
+    //     .await
+    //     .unwrap();
+    let res = conn
         .query(
-            "select signature_name, points, timestamp from score where scoreboard_id = ?1;",
-            libsql::params![scoreboard_id.to_string()],
+            "select signature_name, points, timestamp from score where scoreboard_id = 1;",
+            (),
         )
-        .await
-        .unwrap();
+        .await;
+
     let mut scores = vec![];
-    while let Some(row) = rows.next().await.unwrap() {
-        scores.push(CompleteScore {
-            scoreboard_id: scoreboard_id.clone(),
-            signature_name: row.get::<String>(0).unwrap(),
-            points: row.get::<u32>(1).unwrap(),
-            timestamp: row.get::<String>(2).unwrap(),
-        });
+    match res {
+        Ok(mut rows) => {
+            info!("Query completed.");
+            while let Some(row) = rows.next().await.unwrap() {
+                scores.push(CompleteScore {
+                    scoreboard_id: scoreboard_id.clone(),
+                    signature_name: row.get::<String>(0).unwrap(),
+                    points: row.get::<u32>(1).unwrap(),
+                    timestamp: row.get::<String>(2).unwrap(),
+                });
+                info!("Pushed result row");
+            }
+        }
+        Err(e) => {
+            info!("{}", e.to_string());
+        }
     }
-    Json(scores)
+
+    Json(scores.len())
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -69,6 +91,9 @@ struct ScorePostPayload {
     signature_name: String,
     points: u32,
 }
+async fn root(State(client): State<Arc<Database>>) -> Json<String> {
+    Json("Hello, world!".to_string())
+}
 
 async fn create_score_handler(
     State(client): State<Arc<Database>>,
@@ -91,30 +116,55 @@ async fn create_score_handler(
 
 #[shuttle_runtime::main]
 async fn main(
-    #[shuttle_turso::Turso(addr = "{secrets.TURSO_DB_URL}", token = "{secrets.TURSO_DB_TOKEN}")]
+    #[shuttle_turso::Turso(
+        addr = "libsql://lwood-caengen.turso.io",
+        token = "{secrets.TURSO_DB_TOKEN}"
+    )]
     client: Database,
 ) -> shuttle_axum::ShuttleAxum {
     let client = Arc::new(client);
-    // let conn = client.connect().unwrap();
 
-    // conn.execute(
-    //     "create table if not exists example_users ( uid text primary key, email text );",
-    //     (),
-    // )
-    // .await
-    // .unwrap();
+    info!("Establishing connection...");
+    let conn = client.connect().unwrap();
+    info!("Connected to database.");
+    info!("selecting rows for scoreboard_id {}", 1);
     // let mut rows = conn
-    //     .query("SELECT * FROM sqlite_master WHERE type='table';", ())
+    //     .query(
+    //         "select signature_name, points, timestamp from score where scoreboard_id = ?0;",
+    //         libsql::params![scoreboard_id],
+    //     )
     //     .await
     //     .unwrap();
+    let res = conn
+        .query(
+            "select signature_name, points, timestamp from score where scoreboard_id = 1;",
+            (),
+        )
+        .await;
 
-    // let r1 = rows.next().await.unwrap();
-    // println!("{:?}", r1);
+    match res {
+        Ok(mut rows) => {
+            info!("Query completed.");
+            while let Some(row) = rows.next().await.unwrap() {
+                // scores.push(CompleteScore {
+                //     scoreboard_id: scoreboard_id.clone(),
+                //     signature_name: row.get::<String>(0).unwrap(),
+                //     points: row.get::<u32>(1).unwrap(),
+                //     timestamp: row.get::<String>(2).unwrap(),
+                // });
+                info!("Pushed result row");
+            }
+        }
+        Err(e) => {
+            info!("{}", e.to_string());
+        }
+    }
 
     let router = Router::new()
+        .route("/", get(root))
         .route(
             "/scores/:scoreboard_id",
-            get(get_scores_handler).post(create_score_handler),
+            get(get_scores_handler), /* .post(create_score_handler) */
         )
         .with_state(client);
 
