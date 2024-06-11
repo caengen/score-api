@@ -37,7 +37,7 @@ async fn get_scores_handler(
     //     .unwrap();
     let res = conn
         .query(
-            "select signature_name, points, timestamp from score where scoreboard_id = ?1;",
+            "select signature_name, points, timestamp from score where scoreboard_id = ?1 order by points DESC;",
             libsql::params![scoreboard_id],
         )
         .await;
@@ -101,11 +101,11 @@ async fn create_score_handler(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let conn = client.connect().unwrap();
     conn.execute(
-        "insert into score (scoreboard_id, signature_name, points) values (?1, '?2', ?3);",
-        [
-            format!("{}", score.scoreboard_id),
+        "insert into score (scoreboard_id, signature_name, points, timestamp) values (?1, ?2, ?3, datetime());",
+        libsql::params![
+            score.scoreboard_id,
             score.signature_name.clone(),
-            format!("{}", score.points),
+            score.points,
         ],
     )
     .await
@@ -128,7 +128,7 @@ async fn main(
         .route("/", get(root))
         .route(
             "/scores/:scoreboard_id",
-            get(get_scores_handler), /* .post(create_score_handler) */
+            get(get_scores_handler).post(create_score_handler),
         )
         .with_state(client);
 
