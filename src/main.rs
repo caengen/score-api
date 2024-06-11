@@ -116,10 +116,7 @@ async fn create_score_handler(
 
 #[shuttle_runtime::main]
 async fn main(
-    #[shuttle_turso::Turso(
-        addr = "libsql://lwood-caengen.turso.io",
-        token = "{secrets.TURSO_DB_TOKEN}"
-    )]
+    #[shuttle_turso::Turso(addr = "{secrets.TURSO_DB_URL}", token = "{secrets.TURSO_DB_TOKEN}")]
     client: Database,
 ) -> shuttle_axum::ShuttleAxum {
     let client = Arc::new(client);
