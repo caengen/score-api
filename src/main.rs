@@ -23,7 +23,7 @@ struct CompleteScore {
 async fn get_scores_handler(
     Path(scoreboard_id): Path<u32>,
     State(client): State<Arc<Database>>,
-) -> Json<usize> {
+) -> Json<Vec<CompleteScore>> {
     info!("Establishing connection...");
     let conn = client.connect().unwrap();
     info!("Connected to database.");
@@ -37,8 +37,8 @@ async fn get_scores_handler(
     //     .unwrap();
     let res = conn
         .query(
-            "select signature_name, points, timestamp from score where scoreboard_id = 1;",
-            (),
+            "select signature_name, points, timestamp from score where scoreboard_id = ?1;",
+            libsql::params![scoreboard_id],
         )
         .await;
 
@@ -61,7 +61,7 @@ async fn get_scores_handler(
         }
     }
 
-    Json(scores.len())
+    Json(scores)
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -123,42 +123,6 @@ async fn main(
     client: Database,
 ) -> shuttle_axum::ShuttleAxum {
     let client = Arc::new(client);
-
-    info!("Establishing connection...");
-    let conn = client.connect().unwrap();
-    info!("Connected to database.");
-    info!("selecting rows for scoreboard_id {}", 1);
-    // let mut rows = conn
-    //     .query(
-    //         "select signature_name, points, timestamp from score where scoreboard_id = ?0;",
-    //         libsql::params![scoreboard_id],
-    //     )
-    //     .await
-    //     .unwrap();
-    let res = conn
-        .query(
-            "select signature_name, points, timestamp from score where scoreboard_id = 1;",
-            (),
-        )
-        .await;
-
-    match res {
-        Ok(mut rows) => {
-            info!("Query completed.");
-            while let Some(row) = rows.next().await.unwrap() {
-                // scores.push(CompleteScore {
-                //     scoreboard_id: scoreboard_id.clone(),
-                //     signature_name: row.get::<String>(0).unwrap(),
-                //     points: row.get::<u32>(1).unwrap(),
-                //     timestamp: row.get::<String>(2).unwrap(),
-                // });
-                info!("Pushed result row");
-            }
-        }
-        Err(e) => {
-            info!("{}", e.to_string());
-        }
-    }
 
     let router = Router::new()
         .route("/", get(root))
